@@ -1,10 +1,19 @@
+from pydantic_settings import BaseSettings, SettingsConfigDict
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, DeclarativeBase
 
-DATABASE_URL = "postgresql://postgres:secret@localhost:5432/patients_db"
+class Settings(BaseSettings):
+    database_url: str
 
-engine = create_engine(DATABASE_URL)
+    model_config = SettingsConfigDict(
+        env_file=".env"
+    )
+
+settings = Settings()
+engine = create_engine(settings.database_url   )
 SessionLocal = sessionmaker(bind=engine, autoflush=False)
 
 class Base(DeclarativeBase):
     pass
+
+
