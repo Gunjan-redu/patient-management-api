@@ -13,6 +13,7 @@ class Patient(Base):
     height: Mapped[float]= mapped_column(Numeric(5,1 ), nullable=False)
     weight: Mapped[float] = mapped_column(Numeric(5, 1), nullable=False)
     city: Mapped[str]= mapped_column(String(60), nullable=False)
+    email: Mapped[str | None] = mapped_column(String(120), nullable=True)
 
 class Appointment(Base):
     __tablename__ = "appointments"
