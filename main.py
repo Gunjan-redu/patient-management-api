@@ -2,12 +2,13 @@ from fastapi import FastAPI, HTTPException, Depends
 from pydantic import BaseModel, Field
 from typing import Annotated, Literal
 from models import Patient as PatientDB
-from models import Appointment
+from models import Appointment, User
 from database import SessionLocal
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
 from datetime import datetime
 from pydantic import ConfigDict
+from security import hash_password
 
 
 app = FastAPI()
@@ -41,10 +42,14 @@ class AppointmentCreate(BaseModel):
     appt_at: Annotated[datetime,Field(..., description="Date and time of appointment") ]
     reason: Annotated[str, Field(...,min_length=3, max_length=200, description="Reason for the appointment ")]
 
+class UserCreate(BaseModel):
+    username : Annotated[str, Field(...,min_length=3, max_length=50)]
+    password: Annotated[str, Field(..., min_length=6)]
 
-
-
-
+class UserOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    username: str
 
 def get_db():
     db = SessionLocal()
@@ -168,3 +173,14 @@ def get_appointments(patient_id: int, db: Session = Depends(get_db)):
 
 
 
+@app.post("/register", status_code= 201,  response_model=UserOut)
+def register(user:UserCreate, db:Session = Depends(get_db) ):
+    new_user = User(username=user.username, password_hash=hash_password(user.password))
+    db.add(new_user)
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(status_code=409, detail="username is already taken.")
+    db.refresh(new_user)
+    return new_user

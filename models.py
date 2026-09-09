@@ -22,3 +22,10 @@ class Appointment(Base):
     appt_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
     reason: Mapped[str] = mapped_column(String(200), nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, server_default="now()")
+
+
+class User(Base):
+    __tablename__ = "users"
+    id : Mapped[int] = mapped_column(Integer, primary_key=True)
+    username: Mapped[str]= mapped_column(String(50),unique=True, nullable=False)
+    password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
