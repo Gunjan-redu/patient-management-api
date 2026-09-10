@@ -4,6 +4,7 @@ from sqlalchemy.orm import sessionmaker, DeclarativeBase
 
 class Settings(BaseSettings):
     database_url: str
+    secret_key :str
 
     model_config = SettingsConfigDict(
         env_file=".env"

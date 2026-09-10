@@ -1,14 +1,16 @@
 from fastapi import FastAPI, HTTPException, Depends
+from jose import jwt, JWTError
 from pydantic import BaseModel, Field
 from typing import Annotated, Literal
 from models import Patient as PatientDB
 from models import Appointment, User
-from database import SessionLocal
+from database import SessionLocal, settings
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
 from datetime import datetime
 from pydantic import ConfigDict
-from security import hash_password
+from security import hash_password, create_access_token, verify_password
+from fastapi.security import OAuth2PasswordBearer
 
 
 app = FastAPI()
@@ -51,6 +53,11 @@ class UserOut(BaseModel):
     id: int
     username: str
 
+
+class UserLogin(BaseModel):
+    username: str
+    password: str
+
 def get_db():
     db = SessionLocal()
 
@@ -59,6 +66,25 @@ def get_db():
 
     finally:
         db.close()
+
+
+
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login")
+
+def get_current_user(token:str = Depends(oauth2_scheme), db:Session = Depends(get_db)):
+    try:
+        payload = jwt.decode(token, settings.secret_key, algorithm = ["HS256"])
+        username = payload.get("sub")
+    except JWTError:
+        raise HTTPException(status_code=401, detail="Invalid or expired token")
+
+    user  = db.query(User).filter(User.username == username).first()
+    if not user:
+        raise HTTPException(status_code= 401, detail="Invalid or expired token")
+
+
+    return user
+
 
 @app.get("/")
 def welcome():
@@ -71,7 +97,9 @@ def list_patients(
         city: str| None = None,
         min_age: int | None = None,
         sort_by: Literal["age", "weight", "height"] | None = None,
-        db:Session = Depends(get_db)):
+        db:Session = Depends(get_db),
+        current_user: User = Depends(get_current_user)
+):
 
     query = db.query(PatientDB)
     if city:
@@ -184,3 +212,16 @@ def register(user:UserCreate, db:Session = Depends(get_db) ):
         raise HTTPException(status_code=409, detail="username is already taken.")
     db.refresh(new_user)
     return new_user
+
+
+@app.post("/login")
+def login(credentials:UserLogin, db: Session = Depends(get_db)):
+    user = db.query(User).filter(credentials.username == User.username).first()
+    if (not user) or  (not verify_password(credentials.password, user.password_hash)):
+        raise HTTPException(status_code= 401, detail="Username or password is incorrect" )
+
+    return {
+        "access_token": create_access_token(user.username),
+        "token_type": "Bearer"
+    }
+
