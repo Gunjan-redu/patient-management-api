@@ -11,6 +11,7 @@ from datetime import datetime
 from pydantic import ConfigDict
 from security import hash_password, create_access_token, verify_password
 from fastapi.security import OAuth2PasswordBearer
+from fastapi.security import OAuth2PasswordRequestForm
 
 
 app = FastAPI()
@@ -53,11 +54,6 @@ class UserOut(BaseModel):
     id: int
     username: str
 
-
-class UserLogin(BaseModel):
-    username: str
-    password: str
-
 def get_db():
     db = SessionLocal()
 
@@ -73,7 +69,7 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login")
 
 def get_current_user(token:str = Depends(oauth2_scheme), db:Session = Depends(get_db)):
     try:
-        payload = jwt.decode(token, settings.secret_key, algorithm = ["HS256"])
+        payload = jwt.decode(token, settings.secret_key, algorithms = ["HS256"])
         username = payload.get("sub")
     except JWTError:
         raise HTTPException(status_code=401, detail="Invalid or expired token")
@@ -113,7 +109,7 @@ def list_patients(
     return query.all()
 
 @app.post("/patients", status_code=201, response_model=Patient)
-def create_patient(patient: PatientCreate, db: Session = Depends(get_db)):
+def create_patient(patient: PatientCreate, db: Session = Depends(get_db),current_user: User = Depends(get_current_user) ):
     newpatient =  PatientDB(**patient.model_dump())
     db.add(newpatient)
     try:
@@ -127,7 +123,7 @@ def create_patient(patient: PatientCreate, db: Session = Depends(get_db)):
 
 
 @app.get("/patients/{patient_id}",  response_model=Patient)
-def one_patient(patient_id: int, db:Session = Depends(get_db)):
+def one_patient(patient_id: int, db:Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     patient =    db.query(PatientDB).filter(PatientDB.id == patient_id).first()
     if not patient:
          raise HTTPException(status_code=404, detail="Patient doesn't exist")
@@ -136,7 +132,7 @@ def one_patient(patient_id: int, db:Session = Depends(get_db)):
 
 
 @app.patch("/patients/{patient_id}", response_model=Patient)
-def update_patient(patient_id: int, patientU: UpdatePatient, db:Session= Depends(get_db)):
+def update_patient(patient_id: int, patientU: UpdatePatient, db:Session= Depends(get_db), current_user: User = Depends(get_current_user)):
     patient = db.query(PatientDB).filter(PatientDB.id == patient_id).first()
 
     if not patient:
@@ -150,7 +146,7 @@ def update_patient(patient_id: int, patientU: UpdatePatient, db:Session= Depends
 
 
 @app.put("/patients/{patient_id}", response_model=Patient)
-def replace_patient(patient_id: int, patientU: PatientCreate, db:Session = Depends(get_db)):
+def replace_patient(patient_id: int, patientU: PatientCreate, db:Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     patient = db.query(PatientDB).filter(PatientDB.id == patient_id).first()
 
     if not patient:
@@ -163,7 +159,7 @@ def replace_patient(patient_id: int, patientU: PatientCreate, db:Session = Depen
 
 
 @app.delete("/patients/{patient_id}")
-def delete_patient(patient_id :int, db:Session = Depends(get_db) ):
+def delete_patient(patient_id :int, db:Session = Depends(get_db), current_user: User = Depends(get_current_user) ):
     patient = db.query(PatientDB).filter(PatientDB.id == patient_id).first()
 
     if not patient:
@@ -180,7 +176,7 @@ def delete_patient(patient_id :int, db:Session = Depends(get_db) ):
 
 
 @app.post("/patients/{patient_id}/appointments", status_code=201)
-def book_appointment(patient_id : int, appt: AppointmentCreate, db:Session = Depends(get_db)):
+def book_appointment(patient_id : int, appt: AppointmentCreate, db:Session = Depends(get_db), current_user: User = Depends(get_current_user) ):
     patient =db.query(PatientDB).filter(PatientDB.id == patient_id).first()
     if not patient:
         raise HTTPException(status_code=404, detail="Patient not found")
@@ -193,7 +189,7 @@ def book_appointment(patient_id : int, appt: AppointmentCreate, db:Session = Dep
 
 
 @app.get("/patients/{patient_id}/appointments")
-def get_appointments(patient_id: int, db: Session = Depends(get_db)):
+def get_appointments(patient_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     patient = db.query(PatientDB).filter(PatientDB.id == patient_id).first()
     if not patient:
         raise HTTPException(status_code=404, detail="This patient does not exist")
@@ -215,13 +211,13 @@ def register(user:UserCreate, db:Session = Depends(get_db) ):
 
 
 @app.post("/login")
-def login(credentials:UserLogin, db: Session = Depends(get_db)):
-    user = db.query(User).filter(credentials.username == User.username).first()
-    if (not user) or  (not verify_password(credentials.password, user.password_hash)):
-        raise HTTPException(status_code= 401, detail="Username or password is incorrect" )
+def login(form: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
+    user = db.query(User).filter(User.username == form.username).first()
+    if not user or not verify_password(form.password, user.password_hash):
+        raise HTTPException(status_code=401, detail="Username or password is incorrect")
 
     return {
         "access_token": create_access_token(user.username),
-        "token_type": "Bearer"
+        "token_type": "bearer"
     }
 
